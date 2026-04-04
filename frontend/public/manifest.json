@@ -1,0 +1,16 @@
+{
+  "name": "KamaiShield",
+  "short_name": "KamaiShield",
+  "description": "AI-Powered Parametric Income Protection for India's Last-Mile Riders",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0D1B2A",
+  "theme_color": "#06b6d4",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "categories": ["finance", "insurance", "productivity"],
+  "lang": "en-IN"
+}
