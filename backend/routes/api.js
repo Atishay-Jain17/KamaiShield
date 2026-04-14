@@ -70,14 +70,14 @@ router.get('/disruptions/recent', authMiddleware, (req, res) => {
   res.json(disruptions);
 });
 
-// Get rider alerts
+// Get rider alerts (handles NULL disruption_id for payout alerts)
 router.get('/alerts/my', authMiddleware, (req, res) => {
   const alerts = db.prepare(`
     SELECT a.*, d.type, d.severity
     FROM disruption_alerts a
-    JOIN disruptions d ON a.disruption_id = d.id
+    LEFT JOIN disruptions d ON a.disruption_id = d.id
     WHERE a.rider_id = ?
-    ORDER BY a.created_at DESC LIMIT 10
+    ORDER BY a.created_at DESC LIMIT 20
   `).all(req.user.id);
   db.prepare(`UPDATE disruption_alerts SET read = 1 WHERE rider_id = ?`).run(req.user.id);
   res.json(alerts);
@@ -111,9 +111,8 @@ router.get('/payouts/my', authMiddleware, (req, res) => {
 router.post('/admin/trigger-disruption', authMiddleware, adminOnly, (req, res) => {
   const { type, pincode, city, zone } = req.body;
   if (!TRIGGERS[type]) return res.status(400).json({ error: 'Invalid disruption type', validTypes: Object.keys(TRIGGERS) });
-
   const result = triggerManualDisruption(type, pincode, city, zone);
-  if (!result) return res.json({ success: false, message: 'Disruption already active in this zone' });
+  if (!result) return res.json({ success: false, message: 'Disruption already active in this zone (within last 2 hours)' });
   res.json({ success: true, ...result });
 });
 
@@ -199,46 +198,120 @@ router.get('/admin/claims', authMiddleware, adminOnly, (req, res) => {
   res.json(claims);
 });
 
-// Admin: seed demo data
-router.post('/admin/seed-demo', authMiddleware, adminOnly, (req, res) => {
-  const bcrypt = require('bcryptjs');
-  const demoRiders = [
-    { name: 'Raju Verma', phone: '9111111111', platform: 'Swiggy', city: 'Mumbai', pincode: '400070', zone: 'Kurla', upi: 'raju@upi', earn: 110 },
-    { name: 'Priya Sharma', phone: '9222222222', platform: 'Blinkit', city: 'Delhi', pincode: '110092', zone: 'Shahdara', upi: 'priya@upi', earn: 95 },
-    { name: 'Arjun Nair', phone: '9333333333', platform: 'Zomato', city: 'Bengaluru', pincode: '560034', zone: 'Koramangala', upi: 'arjun@upi', earn: 120 },
-    { name: 'Fatima Khan', phone: '9444444444', platform: 'Amazon', city: 'Hyderabad', pincode: '500032', zone: 'Gachibowli', upi: 'fatima@upi', earn: 90 },
-    { name: 'Suresh Babu', phone: '9555555555', platform: 'Zepto', city: 'Chennai', pincode: '600028', zone: 'T. Nagar', upi: 'suresh@upi', earn: 100 },
-  ];
+// Admin: clear stale/fake disruptions older than 6 hours
+router.post('/admin/clear-stale', authMiddleware, adminOnly, (req, res) => {
+  // Mark disruptions older than 6 hours as resolved
+  const result = db.prepare(`
+    UPDATE disruptions SET status = 'resolved', resolved_at = datetime('now')
+    WHERE status = 'active' AND triggered_at < datetime('now', '-6 hours')
+  `).run();
+  // Also clear disruptions that have no matching real weather threshold
+  // (i.e. fake ones created by old mock monitor)
+  const result2 = db.prepare(`
+    UPDATE disruptions SET status = 'resolved', resolved_at = datetime('now')
+    WHERE status = 'active'
+    AND source IN ('OpenWeatherMap API', 'OpenAQ / CPCB API', 'NDMA Alert Feed', 'News API + Admin Flag')
+  `).run();
+  res.json({ success: true, message: `Cleared ${result.changes + result2.changes} stale disruptions` });
+});
+router.get('/admin/live-conditions', authMiddleware, adminOnly, async (req, res) => {
+  const { fetchWeatherData, fetchAQIData } = require('../services/disruptionMonitor');
+  const cities = ['Mumbai', 'Delhi', 'Bengaluru', 'Chennai', 'Hyderabad'];
+  try {
+    const results = await Promise.allSettled(
+      cities.map(async city => {
+        const [weather, aqi] = await Promise.all([fetchWeatherData(city), fetchAQIData(city)]);
+        return { city, weather, aqi };
+      })
+    );
+    res.json(results.map((r, i) => r.status === 'fulfilled' ? r.value : { city: cities[i], error: r.reason?.message }));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
-  const hash = bcrypt.hashSync('demo123', 10);
-  const { calculatePremium } = require('../services/riskEngine');
+// Admin: zone risk map
+router.get('/admin/zone-risk', authMiddleware, adminOnly, (req, res) => {
+  const zones = db.prepare(`
+    SELECT 
+      z.pincode, z.zone, z.city, z.risk_score,
+      COUNT(DISTINCT CASE WHEN p.status = 'active' AND p.end_date >= date('now') THEN p.id END) as activePolicies,
+      COUNT(DISTINCT CASE WHEN c.status IN ('approved','under_review') THEN c.id END) as activeClaims,
+      COALESCE(SUM(CASE WHEN c.status IN ('approved','paid') THEN c.payout_amount ELSE 0 END), 0) as totalPayouts,
+      COALESCE(SUM(CASE WHEN p2.status != 'cancelled' THEN p2.premium ELSE 0 END), 0) as totalPremiums
+    FROM zone_risk z
+    LEFT JOIN riders r ON r.pincode = z.pincode AND r.role = 'rider'
+    LEFT JOIN policies p ON p.rider_id = r.id
+    LEFT JOIN policies p2 ON p2.rider_id = r.id
+    LEFT JOIN claims c ON c.rider_id = r.id AND c.created_at >= date('now', '-7 days')
+    GROUP BY z.pincode
+    ORDER BY z.risk_score DESC
+  `).all();
 
-  const insertRider = db.transaction(() => {
-    for (const r of demoRiders) {
-      const existing = db.prepare(`SELECT id FROM riders WHERE phone = ?`).get(r.phone);
-      if (existing) continue;
+  const result = zones.map(z => ({
+    ...z,
+    lossRatio: z.totalPremiums > 0 ? ((z.totalPayouts / z.totalPremiums) * 100).toFixed(1) : '0.0'
+  }));
 
-      const riderId = uuidv4();
-      db.prepare(`INSERT INTO riders (id, name, phone, password, platform, city, pincode, zone, upi_id, avg_hourly_earnings) VALUES (?,?,?,?,?,?,?,?,?,?)`)
-        .run(riderId, r.name, r.phone, hash, r.platform, r.city, r.pincode, r.zone, r.upi, r.earn);
+  res.json(result);
+});
 
-      // Give them a standard policy
-      const pricing = calculatePremium('standard', r.pincode, r.city);
-      const policyId = uuidv4();
-      const startDate = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      const endDate = new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      db.prepare(`INSERT INTO policies (id, rider_id, plan, premium, base_premium, coverage_cap, coverage_pct, zone_risk_score, seasonal_factor, start_date, end_date) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-        .run(policyId, riderId, 'standard', pricing.finalPremium, pricing.basePremium, pricing.coverageCap, pricing.coveragePct, pricing.zoneMultiplier, pricing.seasonalFactor, startDate, endDate);
-    }
-  });
+// Admin: ring detection alerts
+router.get('/admin/ring-alerts', authMiddleware, adminOnly, (req, res) => {
+  const alerts = db.prepare(`
+    SELECT ra.*, d.type as disruption_type, d.city, d.zone, d.triggered_at as disruption_time
+    FROM ring_alerts ra
+    JOIN disruptions d ON ra.disruption_id = d.id
+    ORDER BY ra.created_at DESC
+    LIMIT 20
+  `).all();
+  res.json(alerts);
+});
 
-  insertRider();
+// AI: Generate pricing explanation using Gemini
+router.post('/ai/explain-pricing', authMiddleware, async (req, res) => {
+  const { plan, finalPremium, basePremium, zoneLabel, zoneMultiplier, seasonLabel, seasonalFactor, city, zone } = req.body;
+  try {
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
-  // Trigger a couple of disruptions
-  triggerManualDisruption('HEAVY_RAIN', '400070', 'Mumbai', 'Kurla');
-  triggerManualDisruption('SEVERE_AQI', '110092', 'Delhi', 'Shahdara');
+    const prompt = `You are KamaiShield's AI pricing assistant for Indian gig delivery workers.
+Explain in 2-3 short sentences (plain English + 1 Hindi phrase) why this rider's premium is ₹${finalPremium}/week.
+Facts: Base ₹${basePremium}, Zone: ${zone} ${city} (${zoneLabel}, ${zoneMultiplier}× multiplier), Season: ${seasonLabel} (${seasonalFactor}× factor), Plan: ${plan}.
+Be warm, honest, and specific. End with a reassuring Hindi phrase like "Aap surakshit hain ✅".`;
 
-  res.json({ success: true, message: '5 demo riders + policies + disruptions seeded!' });
+    const result = await model.generateContent(prompt);
+    res.json({ explanation: result.response.text() });
+  } catch (err) {
+    console.error('[AI] Gemini error:', err.message);
+    // Fallback explanation
+    const diff = finalPremium - basePremium;
+    res.json({
+      explanation: `Your ₹${finalPremium}/week premium is based on your zone's ${zoneLabel} risk profile${diff > 0 ? ` (+₹${diff} adjustment)` : ''}. ${seasonLabel !== 'Normal' ? `The ${seasonLabel} season adds a small adjustment for higher disruption probability. ` : ''}Your coverage activates automatically when disruptions hit your zone. Aap surakshit hain ✅`
+    });
+  }
+});
+
+// AI: Explain claim BTS score
+router.post('/ai/explain-claim', authMiddleware, async (req, res) => {
+  const { btsScore, tier, signals, disruptionType } = req.body;
+  try {
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+    const suspiciousSignals = (signals || []).filter(s => s.is_suspicious).map(s => s.signal_name).join(', ');
+    const prompt = `You are KamaiShield's fraud detection AI explaining a claim result to a delivery rider.
+BTS Score: ${btsScore}/100, Tier: ${tier} (${tier === 1 ? 'Auto-Approved' : tier === 2 ? 'Under Review' : 'Flagged'}), Disruption: ${disruptionType}.
+${suspiciousSignals ? `Suspicious signals: ${suspiciousSignals}.` : 'All signals look genuine.'}
+Explain in 2 sentences what this means for the rider in simple, non-technical language. Be empathetic. If flagged, explain what they can do.`;
+
+    const result = await model.generateContent(prompt);
+    res.json({ explanation: result.response.text() });
+  } catch (err) {
+    res.json({ explanation: tier === 1 ? 'Your claim looks genuine — all fraud checks passed. Your payout will be included in Sunday\'s transfer.' : tier === 2 ? 'Your claim is under a quick background review. No action needed — this usually resolves within 4 hours.' : 'Your claim needs location verification. Tap "Share Live Location" to resolve this quickly.' });
+  }
 });
 
 module.exports = router;

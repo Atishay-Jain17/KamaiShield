@@ -2,71 +2,86 @@ import { useState, useEffect } from 'react';
 import api from '../api';
 import { Loading, EmptyState, StatusBadge, DisruptionIcon } from '../components/UI';
 import toast from 'react-hot-toast';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, MapPin, Sparkles, CheckCircle2, XCircle, AlertCircle, FileText } from 'lucide-react';
 
 function BTSMeter({ score }) {
-  const color = score >= 55 ? '#22c55e' : score >= 30 ? '#eab308' : '#ef4444';
-  const label = score >= 55 ? 'Genuine ✅' : score >= 30 ? 'Under Review 🔍' : 'Flagged 🚨';
+  const color = score >= 55 ? '#059669' : score >= 30 ? '#d97706' : '#e11d48';
+  const bg    = score >= 55 ? '#d1fae5' : score >= 30 ? '#fef3c7' : '#ffe4e6';
+  const label = score >= 55 ? 'Genuine' : score >= 30 ? 'Under Review' : 'Flagged';
   return (
     <div className="mt-3">
-      <div className="flex justify-between text-xs mb-1">
-        <span className="text-gray-400">Fraud Score (BTS)</span>
-        <span style={{ color }} className="font-bold">{score}/100 — {label}</span>
+      <div className="flex justify-between text-xs mb-2">
+        <span className="text-[#636366] font-medium">Behavioural Truth Score</span>
+        <span className="font-bold px-2 py-0.5 rounded-full text-[11px]" style={{ color, background: bg }}>
+          {score}/100 — {label}
+        </span>
       </div>
-      <div className="h-3 bg-[#0D1B2A] rounded-full overflow-hidden">
-        <div className="h-full rounded-full transition-all" style={{ width: `${score}%`, backgroundColor: color }}/>
+      <div className="h-2 rounded-full overflow-hidden" style={{ background: '#f4f4f5' }}>
+        <div className="h-full rounded-full transition-all duration-700 ease-out"
+          style={{ width: `${score}%`, background: `linear-gradient(90deg,${color}99,${color})` }}/>
       </div>
-      <div className="flex justify-between text-[10px] text-gray-600 mt-0.5">
-        <span>Flagged</span><span>Review (30)</span><span>Approved (55)</span><span>Max</span>
+      <div className="flex justify-between text-[10px] text-[#aeaeb2] mt-1">
+        <span>Flagged &lt;30</span><span>Review 30–54</span><span>Approved ≥55</span>
       </div>
     </div>
   );
 }
 
 export default function Claims() {
-  const [claims, setClaims]   = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [expanded, setExpanded] = useState(null);
-  const [signals, setSignals]   = useState({});
+  const [claims, setClaims]       = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [expanded, setExpanded]   = useState(null);
+  const [signals, setSignals]     = useState({});
   const [verifying, setVerifying] = useState(null);
-  const [filter, setFilter]   = useState('all');
+  const [filter, setFilter]       = useState('all');
+  const [aiExplanations, setAiExplanations] = useState({});
+  const [loadingAI, setLoadingAI] = useState({});
 
   useEffect(() => {
     api.get('/claims/my').then(r => setClaims(r.data)).finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    claims.filter(c => ['flagged','under_review'].includes(c.status)).forEach(c => {
+      if (!signals[c.id]) loadSignals(c.id);
+    });
+  }, [claims]);
+
   const loadSignals = async (id) => {
     if (signals[id]) return;
-    const { data } = await api.get(`/claims/${id}/signals`);
-    setSignals(p => ({ ...p, [id]: data }));
+    try { const { data } = await api.get(`/claims/${id}/signals`); setSignals(p => ({ ...p, [id]: data })); } catch {}
   };
 
-  const toggle = (id) => {
-    setExpanded(expanded === id ? null : id);
-    if (expanded !== id) loadSignals(id);
-  };
+  const toggle = (id) => { setExpanded(expanded === id ? null : id); if (expanded !== id) loadSignals(id); };
 
   const verify = async (claimId) => {
+    if (!navigator.geolocation) { toast.error('Geolocation not supported'); return; }
     setVerifying(claimId);
-    try {
-      const { data } = await api.post(`/claims/${claimId}/verify`);
-      toast[data.success ? 'success' : 'error'](data.message);
-      if (data.success) setClaims(prev => prev.map(c => c.id === claimId ? { ...c, status: 'approved' } : c));
-    } catch { toast.error('Verification failed'); }
-    finally { setVerifying(null); }
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { data } = await api.post(`/claims/${claimId}/verify`, { lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy });
+          toast[data.success ? 'success' : 'error'](data.message);
+          if (data.success) setClaims(prev => prev.map(c => c.id === claimId ? { ...c, status: 'approved' } : c));
+        } catch { toast.error('Verification failed'); }
+        finally { setVerifying(null); }
+      },
+      () => { toast.error('Location access denied. Please enable location.'); setVerifying(null); },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
   };
 
-  if (loading) return <Loading text="Loading your claims..." />;
+  const getAIExplanation = async (claim) => {
+    if (aiExplanations[claim.id]) return;
+    setLoadingAI(p => ({ ...p, [claim.id]: true }));
+    try {
+      const { data } = await api.post('/ai/explain-claim', { btsScore: claim.bts_score, tier: claim.fraud_tier, signals: signals[claim.id] || [], disruptionType: claim.type });
+      setAiExplanations(p => ({ ...p, [claim.id]: data.explanation }));
+    } catch { setAiExplanations(p => ({ ...p, [claim.id]: 'Unable to load explanation.' })); }
+    finally { setLoadingAI(p => ({ ...p, [claim.id]: false })); }
+  };
 
-  const filters = [
-    { key: 'all',          label: 'All' },
-    { key: 'approved',     label: '✅ Approved' },
-    { key: 'under_review', label: '🔍 Review' },
-    { key: 'flagged',      label: '🚨 Flagged' },
-  ];
-
-  const filtered = filter === 'all' ? claims
-    : claims.filter(c => c.status === filter);
+  if (loading) return <Loading text="Loading your claims…" />;
 
   const counts = {
     all: claims.length,
@@ -74,112 +89,157 @@ export default function Claims() {
     under_review: claims.filter(c => c.status === 'under_review').length,
     flagged: claims.filter(c => c.status === 'flagged').length,
   };
+  const filtered = filter === 'all' ? claims : claims.filter(c =>
+    filter === 'approved' ? ['approved','paid'].includes(c.status) : c.status === filter
+  );
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-5">
-      <h1 className="text-xl font-black text-white mb-1">My Claims</h1>
-      <p className="text-gray-400 text-sm mb-4">Auto-created when disruptions hit your zone</p>
+    <div className="page">
+      <div className="mb-5 animate-fade-up">
+        <h1 className="text-[22px] font-bold text-[#1c1c1e] tracking-tight">My Claims</h1>
+        <p className="text-[#8e8e93] text-sm mt-0.5">Auto-created when disruptions hit your zone</p>
+      </div>
 
-      {/* Summary row */}
-      <div className="grid grid-cols-3 gap-2 mb-4">
-        <div className="card text-center py-3">
-          <p className="text-2xl font-black text-green-400">{counts.approved}</p>
-          <p className="text-xs text-gray-400">Approved</p>
-        </div>
-        <div className="card text-center py-3">
-          <p className="text-2xl font-black text-yellow-400">{counts.under_review}</p>
-          <p className="text-xs text-gray-400">Review</p>
-        </div>
-        <div className="card text-center py-3">
-          <p className="text-2xl font-black text-red-400">{counts.flagged}</p>
-          <p className="text-xs text-gray-400">Flagged</p>
-        </div>
+      {/* Summary tiles */}
+      <div className="grid grid-cols-3 gap-2 mb-4 stagger">
+        {[
+          { label:'Approved', count:counts.approved, color:'#059669', bg:'#d1fae5', icon:CheckCircle2 },
+          { label:'Review',   count:counts.under_review, color:'#d97706', bg:'#fef3c7', icon:AlertCircle },
+          { label:'Flagged',  count:counts.flagged, color:'#e11d48', bg:'#ffe4e6', icon:XCircle },
+        ].map((s, i) => (
+          <div key={s.label} className="card-glass text-center py-3 animate-fade-up" style={{ animationDelay: `${i*60}ms` }}>
+            <div className="flex justify-center mb-1">
+              <s.icon size={16} color={s.color} strokeWidth={2}/>
+            </div>
+            <p className="text-xl font-bold" style={{ color: s.color }}>{s.count}</p>
+            <p className="text-[11px] text-[#8e8e93] mt-0.5">{s.label}</p>
+          </div>
+        ))}
       </div>
 
       {/* Filter chips */}
       <div className="flex gap-2 mb-4 overflow-x-auto scrollbar-hide pb-1">
-        {filters.map(f => (
+        {[
+          { key:'all',          label:`All (${counts.all})` },
+          { key:'approved',     label:`Approved (${counts.approved})` },
+          { key:'under_review', label:`Review (${counts.under_review})` },
+          { key:'flagged',      label:`Flagged (${counts.flagged})` },
+        ].map(f => (
           <button key={f.key} onClick={() => setFilter(f.key)}
-            className={`shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+            className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 border ${
               filter === f.key
-                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40'
-                : 'bg-[#112233] text-gray-400 border border-[#1e3a5f]'
-            }`}>
-            {f.label} ({counts[f.key] ?? claims.length})
+                ? 'text-white border-transparent'
+                : 'bg-white text-[#636366] border-[#e5e5ea] hover:border-[#c7d2fe]'
+            }`}
+            style={filter === f.key ? { background: 'linear-gradient(135deg,#6366f1,#4f46e5)', boxShadow: '0 2px 8px rgba(99,102,241,0.3)' } : {}}>
+            {f.label}
           </button>
         ))}
       </div>
 
       {filtered.length === 0
-        ? <EmptyState icon="📋" title="No claims yet" subtitle="Claims appear automatically when disruptions are detected in your zone. No action needed from you." />
+        ? <EmptyState icon={FileText} iconColor="#aeaeb2" title="No claims yet" subtitle="Claims appear automatically when disruptions are detected in your zone." />
         : (
           <div className="space-y-3">
-            {filtered.map(c => (
+            {filtered.map((c, i) => (
               <div key={c.id}
-                className={`card cursor-pointer transition-colors ${
-                  c.status === 'flagged' ? 'border-red-700/60'
-                  : c.status === 'under_review' ? 'border-yellow-700/60'
-                  : 'border-[#1e3a5f]'
+                className={`card-glass cursor-pointer transition-all duration-200 hover:shadow-card-md animate-fade-up ${
+                  c.status === 'flagged' ? 'border-[#fecdd3]' :
+                  c.status === 'under_review' ? 'border-[#fde68a]' : ''
                 }`}
+                style={{ animationDelay: `${i * 40}ms` }}
                 onClick={() => toggle(c.id)}>
 
-                {/* Claim header */}
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-start gap-3 min-w-0">
-                    <span className="text-2xl shrink-0 mt-0.5"><DisruptionIcon type={c.type}/></span>
+                    <DisruptionIcon type={c.type} size={16}/>
                     <div className="min-w-0">
-                      <p className="font-semibold text-white text-sm">{c.subtype}</p>
-                      <p className="text-xs text-gray-400 truncate">{c.zone}, {c.city}</p>
-                      <p className="text-xs text-gray-500">{new Date(c.triggered_at).toLocaleDateString('en-IN', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}</p>
+                      <p className="font-bold text-[#1c1c1e] text-sm">{c.subtype}</p>
+                      <p className="text-xs text-[#8e8e93] truncate">{c.zone}, {c.city}</p>
+                      <p className="text-[11px] text-[#aeaeb2]">{new Date(c.triggered_at).toLocaleDateString('en-IN', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}</p>
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-green-400 font-black text-lg">₹{c.payout_amount}</p>
-                    <p className="text-gray-500 text-xs">{c.hours_affected}hrs lost</p>
+                    <p className="text-[#059669] font-bold text-base">₹{c.payout_amount}</p>
+                    <p className="text-[#aeaeb2] text-[11px]">{c.hours_affected}h lost</p>
                     <StatusBadge status={c.status}/>
+                    <p className="text-[#aeaeb2] text-[10px] mt-0.5">
+                      {c.status === 'approved' ? 'स्वीकृत' : c.status === 'under_review' ? 'समीक्षाधीन' : c.status === 'flagged' ? 'संदिग्ध' : c.status === 'paid' ? 'भुगतान हो गया' : ''}
+                    </p>
                   </div>
                 </div>
 
-                {/* Tier banners */}
+                {/* Flagged banner */}
                 {c.status === 'flagged' && (
-                  <div className="mt-3 bg-red-900/20 border border-red-700 rounded-xl p-3"
+                  <div className="mt-3 rounded-xl p-3 border border-[#fecdd3]" style={{ background: '#fff1f2' }}
                     onClick={e => e.stopPropagation()}>
-                    <p className="text-red-400 font-bold text-sm mb-1">📍 Quick Verification Needed</p>
-                    <p className="text-gray-300 text-xs mb-2">Tap below to share your live location. Takes 10 seconds.</p>
-                    <button className="w-full bg-red-600 hover:bg-red-500 text-white text-sm font-bold py-3 px-4 rounded-xl transition-colors"
+                    <p className="text-[#9f1239] font-bold text-xs mb-1">Location Verification Required</p>
+                    <p className="text-[#636366] text-xs mb-2">Share your live location to verify your claim.</p>
+                    {signals[c.id]?.length > 0 && (
+                      <p className="text-[#e11d48] text-xs mb-2 font-medium">
+                        Issue: {signals[c.id].find(s => s.is_suspicious)?.signal_name?.replace(/_/g,' ') || 'GPS location'} could not be verified
+                      </p>
+                    )}
+                    <button
+                      className="w-full text-white text-xs font-semibold py-2.5 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98]"
+                      style={{ background: 'linear-gradient(135deg,#f43f5e,#e11d48)', boxShadow: '0 2px 8px rgba(244,63,94,0.3)' }}
                       disabled={verifying === c.id}
                       onClick={e => { e.stopPropagation(); verify(c.id); }}>
-                      {verifying === c.id ? 'Verifying...' : '📍 Share Live Location'}
+                      {verifying === c.id
+                        ? <><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"/> Verifying…</>
+                        : <><MapPin size={13} strokeWidth={2.5}/> Share Live Location</>
+                      }
                     </button>
                   </div>
                 )}
 
+                {/* Under review banner */}
                 {c.status === 'under_review' && (
-                  <div className="mt-3 bg-yellow-900/20 border border-yellow-700 rounded-xl p-3">
-                    <p className="text-yellow-400 font-bold text-sm">🔍 Under Review (2–4 hours)</p>
-                    <p className="text-gray-300 text-xs mt-1">Happens automatically in some weather conditions. No action needed. +₹20 goodwill bonus if it takes too long.</p>
+                  <div className="mt-3 rounded-xl p-3 border border-[#fde68a]" style={{ background: '#fffbeb' }}>
+                    <p className="text-[#92400e] font-bold text-xs">Under Review (2–4 hours)</p>
+                    <p className="text-[#636366] text-xs mt-1">No action needed. +₹20 goodwill bonus if review takes too long.</p>
                   </div>
                 )}
 
-                {/* Expanded fraud analysis */}
+                {/* Expanded */}
                 {expanded === c.id && (
-                  <div className="mt-4 border-t border-[#1e3a5f] pt-4" onClick={e => e.stopPropagation()}>
+                  <div className="mt-4 border-t border-[#f2f2f7] pt-4 animate-scale-in" onClick={e => e.stopPropagation()}>
                     <BTSMeter score={c.bts_score}/>
+
+                    {/* AI Explanation */}
+                    <div className="mt-3 rounded-xl p-3 border border-[#c7d2fe]" style={{ background: '#eef2ff' }}>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-1.5">
+                          <Sparkles size={12} color="#4f46e5" strokeWidth={2}/>
+                          <p className="text-[#4f46e5] font-semibold text-xs">AI Explanation</p>
+                        </div>
+                        {!aiExplanations[c.id] && (
+                          <button onClick={() => getAIExplanation(c)} disabled={loadingAI[c.id]}
+                            className="text-[#4f46e5] text-xs font-semibold hover:underline disabled:opacity-50">
+                            {loadingAI[c.id] ? 'Loading…' : 'Explain'}
+                          </button>
+                        )}
+                      </div>
+                      {aiExplanations[c.id] && <p className="text-[#636366] text-xs leading-relaxed">{aiExplanations[c.id]}</p>}
+                    </div>
+
                     {signals[c.id]?.length > 0 && (
-                      <div className="mt-4">
-                        <p className="text-sm font-semibold text-gray-300 mb-2">🔬 Fraud Detection Signals</p>
+                      <div className="mt-3">
+                        <p className="text-xs font-bold text-[#3a3a3c] mb-2">Fraud Detection Signals</p>
                         {signals[c.id].map(s => (
-                          <div key={s.id} className={`flex items-start justify-between py-2.5 border-b border-[#1e3a5f] last:border-0 gap-2 ${s.is_suspicious ? 'bg-red-900/10 -mx-1 px-1 rounded' : ''}`}>
+                          <div key={s.id} className={`flex items-start justify-between py-2.5 border-b border-[#f2f2f7] last:border-0 gap-2 ${s.is_suspicious ? 'rounded-lg px-2 -mx-2' : ''}`}
+                            style={s.is_suspicious ? { background: '#fff1f2' } : {}}>
                             <div className="flex items-start gap-2 min-w-0">
-                              <span className="shrink-0">{s.is_suspicious ? '🚨' : '✅'}</span>
+                              {s.is_suspicious
+                                ? <XCircle size={14} color="#e11d48" strokeWidth={2} className="shrink-0 mt-0.5"/>
+                                : <CheckCircle2 size={14} color="#059669" strokeWidth={2} className="shrink-0 mt-0.5"/>
+                              }
                               <div className="min-w-0">
-                                <p className="text-sm text-white capitalize">{s.signal_name.replace(/_/g, ' ')}</p>
-                                <p className="text-xs text-gray-400 leading-snug">{s.detail}</p>
+                                <p className="text-xs font-semibold text-[#1c1c1e] capitalize">{s.signal_name.replace(/_/g,' ')}</p>
+                                <p className="text-[11px] text-[#8e8e93] leading-snug">{s.detail}</p>
                               </div>
                             </div>
-                            <span className={`text-sm font-bold shrink-0 ${s.is_suspicious ? 'text-red-400' : 'text-green-400'}`}>
-                              {s.signal_value}
-                            </span>
+                            <span className={`text-xs font-bold shrink-0 ${s.is_suspicious ? 'text-[#e11d48]' : 'text-[#059669]'}`}>{s.signal_value}</span>
                           </div>
                         ))}
                       </div>
@@ -187,9 +247,9 @@ export default function Claims() {
                   </div>
                 )}
 
-                <div className="flex items-center justify-end gap-1 mt-2 text-xs text-gray-600">
-                  {expanded === c.id ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
-                  <span>{expanded === c.id ? 'Hide' : 'Fraud analysis'}</span>
+                <div className="flex items-center justify-end gap-1 mt-2 text-[11px] text-[#aeaeb2]">
+                  {expanded === c.id ? <ChevronUp size={13} strokeWidth={2}/> : <ChevronDown size={13} strokeWidth={2}/>}
+                  <span>{expanded === c.id ? 'Hide details' : 'View fraud analysis'}</span>
                 </div>
               </div>
             ))}

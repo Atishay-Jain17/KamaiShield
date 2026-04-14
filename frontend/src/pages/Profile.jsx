@@ -3,6 +3,7 @@ import api from '../api';
 import { Loading } from '../components/UI';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
+import { LogOut, ShieldAlert, CreditCard, IndianRupee, Clock, Phone, MapPin, Bike } from 'lucide-react';
 
 export default function Profile() {
   const { user, logout } = useAuth();
@@ -20,91 +21,126 @@ export default function Profile() {
 
   const save = async () => {
     setSaving(true);
-    try {
-      await api.patch('/rider/profile', form);
-      toast.success('Profile updated! ✅');
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Update failed');
-    } finally { setSaving(false); }
+    try { await api.patch('/rider/profile', form); toast.success('Profile updated!'); }
+    catch (err) { toast.error(err.response?.data?.error || 'Update failed'); }
+    finally { setSaving(false); }
   };
 
   if (loading) return <Loading />;
 
   const weeklyPreview = parseFloat(form.avg_hourly_earnings) * parseFloat(form.hours_per_day) * 6;
 
-  return (
-    <div className="max-w-lg mx-auto px-4 py-5">
-      <h1 className="text-xl font-black text-white mb-1">My Profile</h1>
-      <p className="text-gray-400 text-sm mb-5">Update your UPI and earnings for accurate payouts</p>
+  const identityFields = [
+    { label:'Phone',    value:profile.phone,                    icon:Phone,  color:'#4f46e5', bg:'#e0e7ff' },
+    { label:'Zone',     value:`${profile.zone}, ${profile.city}`, icon:MapPin, color:'#0284c7', bg:'#e0f2fe' },
+    { label:'Platform', value:profile.platform,                 icon:Bike,   color:'#059669', bg:'#d1fae5' },
+  ];
 
-      {/* Identity */}
-      <div className="card mb-4">
-        <h3 className="font-bold text-white mb-3 text-sm">Your Details</h3>
-        <div className="space-y-2.5">
-          {[
-            { label:'Name', value: profile.name, icon:'👤' },
-            { label:'Phone', value: profile.phone, icon:'📱' },
-            { label:'Platform', value: profile.platform, icon:'🛵' },
-            { label:'Zone', value: `${profile.zone}, ${profile.city}`, icon:'📍' },
-          ].map(f => (
-            <div key={f.label} className="flex items-center justify-between py-1">
-              <span className="text-gray-400 text-sm flex items-center gap-2"><span>{f.icon}</span>{f.label}</span>
-              <span className="text-white font-medium text-sm">{f.value}</span>
+  return (
+    <div className="page max-w-lg">
+      <div className="mb-5 animate-fade-up">
+        <h1 className="text-[22px] font-bold text-[#1c1c1e] tracking-tight">My Profile</h1>
+        <p className="text-[#8e8e93] text-sm mt-0.5">Manage your account and payout settings</p>
+      </div>
+
+      {/* Avatar card */}
+      <div className="card-glass mb-4 animate-fade-up">
+        <div className="flex items-center gap-4 mb-4">
+          <div className="w-16 h-16 rounded-3xl flex items-center justify-center text-2xl font-bold text-white shrink-0"
+            style={{ background: 'linear-gradient(135deg,#6366f1,#4f46e5)', boxShadow: '0 4px 16px rgba(99,102,241,0.35)' }}>
+            {profile.name?.[0]?.toUpperCase()}
+          </div>
+          <div>
+            <p className="font-bold text-[#1c1c1e] text-base">{profile.name}</p>
+            <p className="text-[#8e8e93] text-sm">{profile.platform} · {profile.city}</p>
+            <span className={`badge mt-1.5 ${profile.role === 'admin' ? 'badge-purple' : 'badge-green'}`}>
+              {profile.role}
+            </span>
+          </div>
+        </div>
+        <div className="border-t border-[#f2f2f7] pt-3 space-y-0">
+          {identityFields.map((f, i) => (
+            <div key={f.label} className={`flex items-center justify-between py-2.5 ${i < identityFields.length - 1 ? 'border-b border-[#f2f2f7]' : ''}`}>
+              <div className="flex items-center gap-2.5">
+                <div className="icon-wrap w-7 h-7" style={{ background: f.bg }}>
+                  <f.icon size={13} color={f.color} strokeWidth={2}/>
+                </div>
+                <span className="text-xs text-[#8e8e93]">{f.label}</span>
+              </div>
+              <span className="text-xs font-semibold text-[#1c1c1e]">{f.value}</span>
             </div>
           ))}
         </div>
-        <p className="text-xs text-gray-600 mt-3 pt-3 border-t border-[#1e3a5f]">Contact support to change identity details</p>
+        <p className="text-[11px] text-[#aeaeb2] mt-3 pt-3 border-t border-[#f2f2f7]">Contact support to change identity details</p>
       </div>
 
-      {/* Editable */}
-      <div className="card mb-4">
-        <h3 className="font-bold text-white mb-4 text-sm">Payout Settings</h3>
+      {/* Payout settings */}
+      <div className="card-glass mb-4 animate-fade-up" style={{ animationDelay: '60ms' }}>
+        <p className="text-sm font-bold text-[#1c1c1e] mb-4">Payout Settings</p>
         <div className="flex flex-col gap-4">
-          <div>
-            <label className="text-sm text-gray-400 mb-1.5 block">UPI ID for Payouts</label>
-            <input className="input" inputMode="email" placeholder="yourname@upi"
-              value={form.upi_id} onChange={e => setForm(p => ({...p, upi_id: e.target.value}))}/>
-            <p className="text-xs text-gray-500 mt-1">Sunday payouts sent here. Keep this correct.</p>
-          </div>
-          <div>
-            <label className="text-sm text-gray-400 mb-1.5 block">Average Hourly Earnings (₹)</label>
-            <input className="input" type="number" inputMode="numeric" placeholder="100" min="10" max="10000"
-              value={form.avg_hourly_earnings} onChange={e => setForm(p => ({...p, avg_hourly_earnings: e.target.value}))}/>
-          </div>
-          <div>
-            <label className="text-sm text-gray-400 mb-1.5 block">Hours Worked Per Day</label>
-            <input className="input" type="number" inputMode="numeric" placeholder="8" min="1" max="24"
-              value={form.hours_per_day} onChange={e => setForm(p => ({...p, hours_per_day: e.target.value}))}/>
-          </div>
+          {[
+            { key:'upi_id',              label:'UPI ID for Payouts',        hint:'Sunday payouts sent here',  icon:CreditCard,   type:'text',   placeholder:'yourname@upi' },
+            { key:'avg_hourly_earnings', label:'Average Hourly Earnings (₹)', hint:'Used to calculate payouts', icon:IndianRupee,  type:'number', placeholder:'100' },
+            { key:'hours_per_day',       label:'Hours Worked Per Day',       hint:'Typical working hours',     icon:Clock,        type:'number', placeholder:'8' },
+          ].map(f => (
+            <div key={f.key}>
+              <label className="block text-xs font-semibold text-[#3a3a3c] mb-1.5 ml-1">{f.label}</label>
+              <div className="relative">
+                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: '#e0e7ff' }}>
+                  <f.icon size={14} color="#4f46e5" strokeWidth={2}/>
+                </div>
+                <input className="input pl-12" type={f.type} inputMode={f.type === 'number' ? 'numeric' : 'email'}
+                  placeholder={f.placeholder} value={form[f.key]}
+                  onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}/>
+              </div>
+              <p className="text-[11px] text-[#aeaeb2] mt-1 ml-1">{f.hint}</p>
+            </div>
+          ))}
 
           {!isNaN(weeklyPreview) && weeklyPreview > 0 && (
-            <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-3">
-              <p className="text-xs text-cyan-400 font-semibold mb-0.5">Estimated weekly earnings</p>
-              <p className="text-2xl font-black text-white">₹{Math.round(weeklyPreview).toLocaleString('en-IN')}</p>
-              <p className="text-xs text-gray-400">₹{form.avg_hourly_earnings}/hr × {form.hours_per_day}hrs × 6 days</p>
+            <div className="rounded-xl p-3 border border-[#c7d2fe]" style={{ background: '#eef2ff' }}>
+              <p className="text-[11px] text-[#4f46e5] font-semibold mb-0.5">Estimated weekly earnings</p>
+              <p className="text-xl font-bold text-[#1c1c1e]">₹{Math.round(weeklyPreview).toLocaleString('en-IN')}</p>
+              <p className="text-[11px] text-[#8e8e93]">₹{form.avg_hourly_earnings}/hr × {form.hours_per_day}hrs × 6 days</p>
             </div>
           )}
 
           <button className="btn-primary" disabled={saving} onClick={save}>
-            {saving ? 'Saving...' : 'Save Changes'}
+            {saving ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>
+                Saving…
+              </span>
+            ) : 'Save Changes'}
           </button>
         </div>
       </div>
 
       {/* Security */}
-      <div className="card mb-4 border-yellow-700/30">
-        <h3 className="font-bold text-yellow-400 text-sm mb-2">🔒 Stay Safe</h3>
-        <ul className="text-xs text-gray-400 space-y-1.5">
-          <li>• Never share your password with anyone</li>
-          <li>• KamaiShield will NEVER ask for your UPI PIN</li>
-          <li>• Payouts only go to your registered UPI — never to a different number</li>
-          <li>• Suspicious call claiming to be KamaiShield? Hang up and report</li>
+      <div className="rounded-2xl p-4 mb-4 border border-[#fde68a] animate-fade-up" style={{ background: '#fffbeb', animationDelay: '120ms' }}>
+        <div className="flex items-center gap-2 mb-2.5">
+          <div className="icon-wrap w-7 h-7" style={{ background: '#fef3c7' }}>
+            <ShieldAlert size={13} color="#d97706" strokeWidth={2}/>
+          </div>
+          <p className="text-xs font-bold text-[#92400e]">Stay Safe</p>
+        </div>
+        <ul className="text-xs text-[#636366] space-y-1.5">
+          {[
+            'Never share your password with anyone',
+            'KamaiShield will NEVER ask for your UPI PIN',
+            'Payouts only go to your registered UPI',
+            'Suspicious call? Hang up and report',
+          ].map(tip => (
+            <li key={tip} className="flex items-start gap-1.5">
+              <span className="text-[#d97706] mt-0.5">•</span> {tip}
+            </li>
+          ))}
         </ul>
       </div>
 
       {/* Logout */}
-      <button onClick={logout} className="btn-danger w-full">
-        Log Out
+      <button onClick={logout} className="btn-danger w-full flex items-center justify-center gap-2 animate-fade-up" style={{ animationDelay: '180ms' }}>
+        <LogOut size={16} strokeWidth={2}/> Log Out
       </button>
     </div>
   );

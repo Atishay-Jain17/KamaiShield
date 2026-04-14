@@ -120,11 +120,21 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS disruption_alerts (
     id TEXT PRIMARY KEY,
     rider_id TEXT NOT NULL,
-    disruption_id TEXT NOT NULL,
+    disruption_id TEXT,
     message TEXT NOT NULL,
     read INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now')),
-    FOREIGN KEY (rider_id) REFERENCES riders(id),
+    FOREIGN KEY (rider_id) REFERENCES riders(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS ring_alerts (
+    id TEXT PRIMARY KEY,
+    disruption_id TEXT NOT NULL,
+    flag_type TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    detail TEXT,
+    claim_count INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (disruption_id) REFERENCES disruptions(id)
   );
 `);
@@ -169,11 +179,41 @@ const { v4: uuidv4 } = require('uuid');
 
 const adminExists = db.prepare(`SELECT id FROM riders WHERE phone = '0000000000'`).get();
 if (!adminExists) {
-  const hash = bcrypt.hashSync('admin123', 10);
+  const hash = bcrypt.hashSync('Admin@123', 12);
   db.prepare(`
     INSERT INTO riders (id, name, phone, email, password, platform, city, pincode, zone, upi_id, role)
     VALUES (?, 'KamaiShield Admin', '0000000000', 'admin@kamaishield.in', ?, 'internal', 'Mumbai', '400001', 'Fort/CST', 'admin@upi', 'admin')
   `).run(uuidv4(), hash);
+} else {
+  // Always keep admin password in sync
+  db.prepare(`UPDATE riders SET password = ? WHERE phone = '0000000000'`)
+    .run(bcrypt.hashSync('Admin@123', 12));
 }
+
+// ── SEED TEST RIDER ACCOUNT ────────────────────────────────────────────────
+const testRiderExists = db.prepare(`SELECT id FROM riders WHERE phone = '9111111111'`).get();
+if (!testRiderExists) {
+  const hash = bcrypt.hashSync('Rider@123', 12);
+  const riderId = uuidv4();
+  db.prepare(`
+    INSERT INTO riders (id, name, phone, password, platform, city, pincode, zone, upi_id, avg_hourly_earnings, hours_per_day)
+    VALUES (?, 'Raju Verma', '9111111111', ?, 'Swiggy', 'Mumbai', '400070', 'Kurla', 'raju@upi', 110, 8)
+  `).run(riderId, hash);
+} else {
+  // Always keep test rider password in sync
+  db.prepare(`UPDATE riders SET password = ? WHERE phone = '9111111111'`)
+    .run(bcrypt.hashSync('Rider@123', 12));
+}
+
+// ── AUTO-RESOLVE STALE DISRUPTIONS ON STARTUP ─────────────────────────────
+// Clears any disruptions created by the old mock monitor (identifiable by source)
+db.prepare(`
+  UPDATE disruptions SET status = 'resolved', resolved_at = datetime('now')
+  WHERE status = 'active'
+  AND (
+    triggered_at < datetime('now', '-6 hours')
+    OR source IN ('OpenWeatherMap API', 'OpenAQ / CPCB API', 'NDMA Alert Feed', 'News API + Admin Flag')
+  )
+`).run();
 
 module.exports = db;

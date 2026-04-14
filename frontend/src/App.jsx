@@ -34,18 +34,26 @@ export default function App() {
   return (
     <>
       <Toaster position="top-right" toastOptions={{
-        style: { background: '#112233', color: '#fff', border: '1px solid #1e3a5f' },
-        success: { iconTheme: { primary: '#22c55e', secondary: '#fff' } },
-        error:   { iconTheme: { primary: '#ef4444', secondary: '#fff' } },
+        style: {
+          background: 'rgba(255,255,255,0.95)',
+          backdropFilter: 'blur(20px)',
+          color: '#1c1c1e',
+          border: '1px solid rgba(255,255,255,0.6)',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)',
+          borderRadius: '14px',
+          fontSize: '14px',
+          fontWeight: '500',
+          padding: '12px 16px',
+        },
+        success: { iconTheme: { primary: '#059669', secondary: '#fff' } },
+        error:   { iconTheme: { primary: '#e11d48', secondary: '#fff' } },
       }}/>
       <Navbar/>
       <Routes>
-        {/* Public */}
         <Route path="/"         element={<Landing/>}/>
         <Route path="/login"    element={<PublicOnlyRoute><Login/></PublicOnlyRoute>}/>
         <Route path="/register" element={<PublicOnlyRoute><Register/></PublicOnlyRoute>}/>
 
-        {/* Rider */}
         <Route path="/dashboard" element={<PrivateRoute><Dashboard/></PrivateRoute>}/>
         <Route path="/policy"    element={<PrivateRoute><Policy/></PrivateRoute>}/>
         <Route path="/claims"    element={<PrivateRoute><Claims/></PrivateRoute>}/>
@@ -53,7 +61,6 @@ export default function App() {
         <Route path="/alerts"    element={<PrivateRoute><Alerts/></PrivateRoute>}/>
         <Route path="/profile"   element={<PrivateRoute><Profile/></PrivateRoute>}/>
 
-        {/* Admin */}
         <Route path="/admin"                 element={<PrivateRoute adminOnly><AdminDashboard/></PrivateRoute>}/>
         <Route path="/admin/analytics"       element={<PrivateRoute adminOnly><AdminAnalytics/></PrivateRoute>}/>
         <Route path="/admin/riders"          element={<PrivateRoute adminOnly><AdminRiders/></PrivateRoute>}/>

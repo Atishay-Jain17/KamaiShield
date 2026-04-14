@@ -38,7 +38,11 @@ app.use(cors({
 }));
 
 // ── BODY PARSING (with size limit to prevent payload bombs) ───────────────
-app.use(express.json({ limit: '10kb' }));
+// Use a custom type matcher so axios's "application/json; charset=UTF-8" is accepted
+app.use(express.json({ limit: '10kb', type: req => {
+  const ct = (req.headers['content-type'] || '').toLowerCase();
+  return ct.startsWith('application/json');
+}}));
 app.use(express.urlencoded({ extended: false, limit: '10kb' }));
 app.disable('x-powered-by');
 
@@ -65,5 +69,9 @@ app.use((err, _req, res, _next) => {
 // ── DISRUPTION MONITOR ────────────────────────────────────────────────────
 require('./services/disruptionMonitor').startDisruptionMonitor();
 
-app.listen(PORT, () => console.log(`\n  🛡️  KamaiShield API → http://localhost:${PORT}  [${process.env.NODE_ENV || 'dev'}]\n`));
+// Only bind to a port when run directly (not when require()'d by tests)
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`\n  🛡️  KamaiShield API → http://localhost:${PORT}  [${process.env.NODE_ENV || 'dev'}]\n`));
+}
+
 module.exports = app;

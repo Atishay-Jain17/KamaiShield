@@ -118,7 +118,8 @@ function getFraudInsights() {
            MIN(c.created_at) as first_claim,
            MAX(c.created_at) as last_claim,
            AVG(c.bts_score) as avg_bts,
-           COUNT(CASE WHEN c.fraud_tier = 3 THEN 1 END) as flagged_count
+           COUNT(CASE WHEN c.fraud_tier = 3 THEN 1 END) as flagged_count,
+           (SELECT COUNT(*) FROM ring_alerts ra WHERE ra.disruption_id = d.id) as ring_flag_count
     FROM disruptions d
     LEFT JOIN claims c ON d.id = c.disruption_id
     GROUP BY d.id
