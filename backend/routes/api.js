@@ -334,6 +334,12 @@ router.get('/admin/analytics/fraud', authMiddleware, adminOnly, (req, res) => {
 // ── RIDER: Update profile ──────────────────────────────────────────────────
 const { sanitizeString } = require('../middleware/auth');
 
+// Get policy exclusions
+router.get('/policies/exclusions', (req, res) => {
+  const { EXCLUSIONS } = require('../services/riskEngine');
+  res.json({ exclusions: EXCLUSIONS });
+});
+
 router.patch('/rider/profile', authMiddleware, (req, res) => {
   const { upi_id, avg_hourly_earnings, hours_per_day } = req.body;
   const updates = {};

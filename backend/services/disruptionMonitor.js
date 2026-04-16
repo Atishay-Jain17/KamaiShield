@@ -327,6 +327,12 @@ function startDisruptionMonitor() {
   cron.schedule('30 23 * * 0', () => {
     processWeeklyPayouts();
   });
+
+  // Daily at 2 AM — refresh ML risk scores with latest disruption data
+  cron.schedule('0 2 * * *', () => {
+    const { refreshMLRiskScores } = require('./mlRiskModel');
+    refreshMLRiskScores();
+  });
 }
 
 // ── WEEKLY PAYOUT PROCESSING ──────────────────────────────────────────────

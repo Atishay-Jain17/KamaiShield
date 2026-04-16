@@ -234,8 +234,10 @@ export default function Dashboard() {
 
       {/* Disclaimer */}
       <div className="rounded-xl p-3 border border-[#e5e5ea] animate-fade-up" style={{ background: '#f4f4f5' }}>
+        <p className="text-[#aeaeb2] text-[11px] text-center leading-relaxed font-medium mb-1">Coverage Exclusions</p>
         <p className="text-[#aeaeb2] text-[11px] text-center leading-relaxed">
-          ℹ️ KamaiShield covers income loss only. Health, life, accident, and vehicle damage are not covered.
+          KamaiShield covers <strong className="text-[#636366]">income loss from weather & civic disruptions only</strong>.<br/>
+          Not covered: health, life, accident, vehicle damage, war, pandemic, terrorism, or acts of God outside defined triggers.
         </p>
       </div>
     </div>

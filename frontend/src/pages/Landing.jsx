@@ -15,7 +15,7 @@ export default function Landing() {
           <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 mb-6 border border-[#c7d2fe]"
             style={{ background:'rgba(238,242,255,0.9)' }}>
             <Zap size={12} color="#4f46e5" strokeWidth={2.5}/>
-            <span className="text-[#4f46e5] text-xs font-semibold">AI-Powered Parametric Insurance</span>
+            <span className="text-[#4f46e5] text-xs font-semibold">Automated Parametric Insurance</span>
           </div>
           {/* Logo */}
           <div className="flex justify-center mb-6">
@@ -76,7 +76,7 @@ export default function Landing() {
           {[
             { step:'01', icon:'📱', title:'Sign Up', desc:'Register with your phone, platform, and zone in under 2 minutes.' },
             { step:'02', icon:'💳', title:'Buy a Plan', desc:'Pick Basic, Standard, or Pro. Pay ₹29–₹79/week. Active immediately.' },
-            { step:'03', icon:'🤖', title:'We Monitor', desc:'AI watches weather, AQI, and civic alerts for your exact pincode 24/7.' },
+            { step:'03', icon:'📡', title:'We Monitor', desc:'Real-time APIs track weather, AQI, and civic alerts for your exact pincode every 5 minutes.' },
             { step:'04', icon:'💰', title:'Get Paid', desc:'Lost income consolidated and sent to your UPI every Sunday night.' },
           ].map((s, i) => (
             <div key={s.step} className="card-glass hover:shadow-card-md transition-all duration-200 animate-fade-up"
@@ -153,7 +153,7 @@ export default function Landing() {
             </div>
           ))}
         </div>
-        <p className="text-center text-[#aeaeb2] text-xs mt-4">Premiums AI-adjusted by zone risk score and season</p>
+        <p className="text-center text-[#aeaeb2] text-xs mt-4">Premiums adjusted by zone risk score and seasonal factors</p>
       </section>
 
       {/* CTA */}

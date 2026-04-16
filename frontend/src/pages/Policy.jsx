@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import { Loading, StatusBadge } from '../components/UI';
 import toast from 'react-hot-toast';
-import { CheckCircle2, ChevronDown, ChevronUp, ShieldCheck, Sparkles, MapPin, Gauge, CloudRain, Wind } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronUp, ShieldCheck, Sparkles, MapPin, Gauge, CloudRain, Wind, Ban } from 'lucide-react';
 
 export default function Policy() {
   const [quotes, setQuotes] = useState([]);
@@ -72,7 +72,7 @@ export default function Policy() {
     <div className="page">
       <div className="mb-5 animate-fade-up">
         <h1 className="text-[22px] font-bold text-[#1c1c1e] tracking-tight">My Policy</h1>
-        <p className="text-[#8e8e93] text-sm mt-0.5">AI-adjusted weekly premiums for your zone</p>
+        <p className="text-[#8e8e93] text-sm mt-0.5">Zone & season-adjusted weekly premiums</p>
       </div>
 
       {/* Active policy */}
@@ -126,12 +126,12 @@ export default function Policy() {
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-1.5">
             <Sparkles size={13} color="#4f46e5" strokeWidth={2}/>
-            <p className="text-[#4f46e5] font-semibold text-xs">AI Pricing Insights</p>
+            <p className="text-[#4f46e5] font-semibold text-xs">Pricing Breakdown</p>
           </div>
           {!aiExplanation && (
             <button onClick={getAIExplanation} disabled={loadingAI}
               className="text-[#4f46e5] text-xs font-semibold hover:underline disabled:opacity-50">
-              {loadingAI ? 'Loading…' : 'Explain my price'}
+              {loadingAI ? 'Loading…' : 'Explain in detail'}
             </button>
           )}
         </div>
@@ -228,6 +228,36 @@ export default function Policy() {
           })}
         </div>
         <p className="text-[#aeaeb2] text-[11px] mt-2 text-center">Based on your ₹{rider?.avg_hourly_earnings || 100}/hr earnings</p>
+      </div>
+
+      {/* Coverage Exclusions */}
+      <div className="rounded-2xl p-4 mb-4 border border-[#e5e5ea] animate-fade-up" style={{ background:'#f4f4f5' }}>
+        <div className="flex items-start gap-3">
+          <div className="icon-wrap w-10 h-10 shrink-0" style={{ background:'#ffe4e6' }}>
+            <Ban size={16} color="#e11d48" strokeWidth={2}/>
+          </div>
+          <div>
+            <p className="font-bold text-[#1c1c1e] text-sm mb-1.5">What's Not Covered</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+              {[
+                'Health & medical expenses',
+                'Life or accidental death',
+                'Vehicle repair or damage',
+                'Personal accidents',
+                'War or armed conflict',
+                'Pandemic or epidemic',
+                'Terrorism or civil unrest',
+                'Acts of God (outside defined triggers)',
+              ].map(ex => (
+                <div key={ex} className="flex items-center gap-1.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#e11d48] shrink-0"/>
+                  <span className="text-[11px] text-[#636366]">{ex}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-[#aeaeb2] mt-2">Coverage is strictly limited to income loss caused by the 5 defined parametric triggers.</p>
+          </div>
+        </div>
       </div>
 
       {/* Honest Worker Guarantee */}

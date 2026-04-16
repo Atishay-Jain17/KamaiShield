@@ -24,7 +24,7 @@ KamaiShield is an **AI-powered parametric income protection platform**. Riders p
 
 1. **Automatically detects** the disruption via live weather and AQI APIs
 2. **Instantly creates a claim** — no form, no button, no waiting
-3. **Runs AI fraud validation** on every claim using a 6-signal Behavioural Truth Score
+3. **Runs rule-based fraud validation** on every claim using a 6-signal Behavioural Truth Score
 4. **Pays out** the rider's lost income every Sunday via UPI
 
 Zero paperwork. Zero manual claims. Fully automated.
@@ -51,10 +51,9 @@ All triggers are **pincode-zone specific** — a flood in Kurla does not trigger
 | Standard Shield | ₹49/week | 75% of lost income | ₹1,000/week |
 | Pro Shield | ₹79/week | 90% of lost income | ₹1,800/week |
 
-Premiums are **AI-adjusted** by zone risk score (0.85×–1.25×) and seasonal factor (1.0×–1.25×).
+Premiums are **adjusted** by zone risk score (0.85×–1.25×) and seasonal factor (1.0×–1.25×).
 
-### Behavioural Truth Score (BTS) — Fraud Detection
-Every claim is scored 0–100 using 6 independent signals:
+### Behavioural Truth Score (BTS) — Fraud DetectionEvery claim is scored 0–100 using 6 independent signals:
 
 | Signal | Max Points | What it detects |
 |---|---|---|
@@ -69,6 +68,21 @@ Every claim is scored 0–100 using 6 independent signals:
 - **BTS ≥ 55** → Tier 1: Auto-Approve, instant payout
 - **BTS 30–54** → Tier 2: Silent 4-hour background review + ₹20 goodwill bonus
 - **BTS < 30** → Tier 3: One-tap live location verification required
+
+### Coverage Exclusions
+
+KamaiShield covers **income loss from the 5 defined parametric triggers only**. The following are explicitly excluded:
+
+- Health or medical expenses
+- Life insurance or accidental death
+- Vehicle repair or damage
+- Personal accidents
+- **War or armed conflict**
+- **Pandemic or epidemic**
+- **Terrorism or civil unrest**
+- Acts of God outside the 5 defined triggers (e.g. earthquake, lightning)
+
+---
 
 ### Ring Detection Engine
 Detects coordinated fraud syndicates automatically:
