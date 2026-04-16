@@ -4,6 +4,7 @@ import { Navbar, Loading } from './components/UI';
 import { Toaster } from 'react-hot-toast';
 
 import Landing      from './pages/Landing';
+import Compliance   from './pages/Compliance';
 import Login        from './pages/Login';
 import Register     from './pages/Register';
 import Dashboard    from './pages/Dashboard';
@@ -50,7 +51,8 @@ export default function App() {
       }}/>
       <Navbar/>
       <Routes>
-        <Route path="/"         element={<Landing/>}/>
+        <Route path="/"           element={<Landing/>}/>
+        <Route path="/compliance" element={<Compliance/>}/>
         <Route path="/login"    element={<PublicOnlyRoute><Login/></PublicOnlyRoute>}/>
         <Route path="/register" element={<PublicOnlyRoute><Register/></PublicOnlyRoute>}/>
 

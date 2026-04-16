@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import api from '../api';
 import { Loading, StatCard } from '../components/UI';
-import { AlertTriangle, FileText, Wallet, MapPin } from 'lucide-react';
+import { AlertTriangle, FileText, Wallet, MapPin, TrendingUp, TrendingDown, DollarSign, BarChart3, ChevronDown, ChevronUp, Activity, Percent, RefreshCw, ShieldCheck } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, RadarChart, Radar, PolarGrid,
-  PolarAngleAxis, PolarRadiusAxis
+  PolarAngleAxis, PolarRadiusAxis, ReferenceLine, Cell
 } from 'recharts';
 
 const RISK_COLORS = { HIGH:'#dc2626', MEDIUM:'#d97706', LOW:'#16a34a' };
@@ -14,6 +14,7 @@ const TT = { contentStyle: { background:'#fff', border:'1px solid #e2e8f0', bord
 function RiskCard({ zone }) {
   const { nextWeekForecast: f } = zone;
   const color = RISK_COLORS[f.riskLevel];
+  const [showML, setShowML] = useState(false);
   const radarData = [
     { trigger:'Rain',  value: f.probabilities.heavyRain },
     { trigger:'AQI',   value: f.probabilities.severePollution },
@@ -21,6 +22,12 @@ function RiskCard({ zone }) {
     { trigger:'Flood', value: f.probabilities.flood },
     { trigger:'Civic', value: f.probabilities.civic },
   ];
+
+  // ML features from the zone object (populated by analyticsEngine via mlRiskModel)
+  const mlFeatures = zone.mlFeatures || null;
+  const linearScore = zone.linearScore;
+  const sigmoidScore = zone.sigmoidScore;
+  const confidence = zone.confidence;
 
   return (
     <div className="card hover:shadow-card-md transition-shadow" style={{ borderColor: color + '44', borderWidth: '1.5px' }}>
@@ -53,6 +60,62 @@ function RiskCard({ zone }) {
       <p className="text-[10px] mt-2 pt-2 border-t border-surface-100 font-medium" style={{ color }}>
         {f.recommendation}
       </p>
+
+      {/* ML Details toggle */}
+      <button
+        onClick={() => setShowML(v => !v)}
+        className="mt-2 w-full flex items-center justify-between text-[10px] text-ink-400 hover:text-primary-600 transition-colors pt-2 border-t border-surface-100"
+      >
+        <span className="font-semibold">Show ML details</span>
+        {showML ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
+      </button>
+
+      {showML && (
+        <div className="mt-2 bg-surface-50 rounded-xl p-2.5 text-[10px] space-y-1.5">
+          <p className="font-semibold text-ink-700 mb-1.5">ML Feature Weights</p>
+          {mlFeatures ? (
+            <>
+              {[
+                { label: 'Disruption Freq', key: 'disruptionFrequency', weight: '0.28' },
+                { label: 'Claim Rate',      key: 'claimRate',           weight: '0.22' },
+                { label: 'Flood Risk',      key: 'floodRisk',           weight: '0.15' },
+                { label: 'Rain Risk',       key: 'rainRisk',            weight: '0.14' },
+                { label: 'AQI Risk',        key: 'aqiRisk',             weight: '0.10' },
+                { label: 'Heat Risk',       key: 'heatRisk',            weight: '0.07' },
+                { label: 'Seasonal',        key: 'seasonalFactor',      weight: '0.04' },
+              ].map(f => (
+                <div key={f.key} className="flex items-center gap-1.5">
+                  <span className="text-ink-400 w-24 shrink-0">{f.label}</span>
+                  <div className="flex-1 h-1 bg-surface-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-primary-500"
+                      style={{ width: `${Math.round((mlFeatures[f.key] || 0) * 100)}%` }}
+                    />
+                  </div>
+                  <span className="text-ink-600 w-8 text-right">{((mlFeatures[f.key] || 0) * 100).toFixed(0)}%</span>
+                  <span className="text-ink-300 w-8 text-right">w={f.weight}</span>
+                </div>
+              ))}
+              <div className="border-t border-surface-200 pt-1.5 mt-1 space-y-0.5">
+                <div className="flex justify-between text-ink-500">
+                  <span>Linear score</span>
+                  <span className="font-mono font-semibold text-ink-800">{linearScore ?? zone.riskScore}</span>
+                </div>
+                <div className="flex justify-between text-ink-500">
+                  <span>Sigmoid output</span>
+                  <span className="font-mono font-semibold text-ink-800">{sigmoidScore ?? '—'}</span>
+                </div>
+                <div className="flex justify-between text-ink-500">
+                  <span>Confidence</span>
+                  <span className="font-semibold text-primary-600">{confidence ?? '—'}%</span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="text-ink-400">ML feature data not available for this zone.</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -61,6 +124,7 @@ export default function AdminAnalytics() {
   const [predictive, setPredictive] = useState([]);
   const [weekly, setWeekly]         = useState([]);
   const [fraud, setFraud]           = useState(null);
+  const [unitEcon, setUnitEcon]     = useState(null);
   const [loading, setLoading]       = useState(true);
   const [tab, setTab]               = useState('predictive');
 
@@ -69,10 +133,12 @@ export default function AdminAnalytics() {
       api.get('/admin/analytics/predictive'),
       api.get('/admin/analytics/weekly'),
       api.get('/admin/analytics/fraud'),
-    ]).then(([p, w, f]) => {
+      api.get('/admin/unit-economics'),
+    ]).then(([p, w, f, u]) => {
       setPredictive(p.data);
       setWeekly(w.data);
       setFraud(f.data);
+      setUnitEcon(u.data);
     }).finally(() => setLoading(false));
   }, []);
 
@@ -111,9 +177,10 @@ export default function AdminAnalytics() {
       {/* Tabs */}
       <div className="flex gap-0 mb-6 border-b border-surface-200">
         {[
-          { key:'predictive', label:'Zone Forecast' },
-          { key:'weekly',     label:'Weekly Trends' },
-          { key:'fraud',      label:'Fraud Insights' },
+          { key:'predictive',   label:'Zone Forecast' },
+          { key:'weekly',       label:'Weekly Trends' },
+          { key:'fraud',        label:'Fraud Insights' },
+          { key:'uniteconomics',label:'Unit Economics' },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`pb-3 px-4 text-sm font-semibold transition-colors border-b-2 -mb-px ${
@@ -250,6 +317,84 @@ export default function AdminAnalytics() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Unit Economics */}
+      {tab === 'uniteconomics' && unitEcon && (
+        <div className="space-y-5">
+          {/* CAC highlight */}
+          <div className="card border-success-200 bg-success-50/40">
+            <div className="flex items-center gap-3">
+              <div className="icon-wrap w-10 h-10 bg-success-100">
+                <TrendingDown size={18} className="text-success-600"/>
+              </div>
+              <div>
+                <p className="text-success-700 font-bold text-lg">CAC = ₹0</p>
+                <p className="text-ink-600 text-xs">Customer Acquisition Cost — organic word-of-mouth model. No paid ads, no agents, no commissions. This is the moat.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Key metrics grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <StatCard label="LTV"              value={`₹${unitEcon.ltv.toFixed(0)}`}          sub="Lifetime value / rider"       color="blue"   icon={DollarSign}/>
+            <StatCard label="MRR"              value={`₹${Math.round(unitEcon.mrr).toLocaleString('en-IN')}`} sub="Monthly recurring revenue" color="green"  icon={TrendingUp}/>
+            <StatCard label="ARR"              value={`₹${Math.round(unitEcon.arr).toLocaleString('en-IN')}`} sub="Projected annual revenue"  color="purple" icon={BarChart3}/>
+            <StatCard label="Avg Premium"      value={`₹${unitEcon.avgPremium.toFixed(0)}`}   sub="Per policy per week"          color="yellow" icon={Wallet}/>
+            <StatCard label="Loss Ratio"       value={`${unitEcon.lossRatio}%`}               sub={`Break-even: ${unitEcon.breakEvenLossRatio}%`} color={unitEcon.lossRatio < 70 ? 'green' : unitEcon.lossRatio < 85 ? 'yellow' : 'red'} icon={Percent}/>
+            <StatCard label="Combined Ratio"   value={`${unitEcon.combinedRatio}%`}           sub={`Incl. ${unitEcon.expenseRatio}% expense ratio`} color={unitEcon.combinedRatio < 85 ? 'green' : 'yellow'} icon={Activity}/>
+            <StatCard label="Reserve Adequacy" value={`${unitEcon.reserveAdequacy}×`}         sub="Current / est. next week"     color={unitEcon.reserveAdequacy >= 1.5 ? 'green' : 'red'} icon={ShieldCheck}/>
+            <StatCard label="Retention Rate"   value={`${(unitEcon.retentionRate * 100).toFixed(0)}%`} sub="Riders with 2+ policies" color="blue" icon={RefreshCw}/>
+          </div>
+
+          {/* Loss Ratio vs Break-even chart */}
+          <div className="card">
+            <h3 className="text-sm font-semibold text-ink-800 mb-1">Loss Ratio vs Break-even</h3>
+            <p className="text-ink-400 text-xs mb-4">Industry break-even is 85%. Below = profitable. Above = reserve strain.</p>
+            {(() => {
+              const chartData = [
+                { name: 'Loss Ratio',     value: unitEcon.lossRatio,          color: unitEcon.lossRatio < 70 ? '#16a34a' : unitEcon.lossRatio < 85 ? '#d97706' : '#dc2626' },
+                { name: 'Combined Ratio', value: unitEcon.combinedRatio,      color: unitEcon.combinedRatio < 85 ? '#2563eb' : '#d97706' },
+                { name: 'Break-even',     value: unitEcon.breakEvenLossRatio, color: '#94a3b8' },
+              ];
+              return (
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={chartData} margin={{ top: 10, right: 20, bottom: 0, left: 0 }}>
+                    <XAxis dataKey="name" stroke="#cbd5e1" tick={{ fill:'#64748b', fontSize:11 }}/>
+                    <YAxis domain={[0, 100]} stroke="#cbd5e1" tick={{ fill:'#64748b', fontSize:11 }} tickFormatter={v => `${v}%`}/>
+                    <Tooltip {...TT} formatter={v => [`${v}%`]}/>
+                    <ReferenceLine y={85} stroke="#dc2626" strokeDasharray="4 2" label={{ value:'Break-even 85%', fill:'#dc2626', fontSize:10, position:'insideTopRight' }}/>
+                    <Bar dataKey="value" radius={[6,6,0,0]}>
+                      {chartData.map((entry, index) => (
+                        <Cell key={index} fill={entry.color}/>
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              );
+            })()}
+          </div>
+
+          {/* Financial summary table */}
+          <div className="card">
+            <h3 className="text-sm font-semibold text-ink-800 mb-4">Financial Summary</h3>
+            <div className="space-y-0">
+              {[
+                { label: 'Total Premiums Collected', value: `₹${unitEcon.totalPremiumsCollected.toLocaleString('en-IN')}`, color: 'text-success-600' },
+                { label: 'Total Payouts Made',       value: `₹${unitEcon.totalPayoutsMade.toLocaleString('en-IN')}`,       color: 'text-danger-600' },
+                { label: 'Solvency Margin',          value: `₹${unitEcon.solvencyMargin.toLocaleString('en-IN')}`,         color: unitEcon.solvencyMargin >= 0 ? 'text-success-600' : 'text-danger-600' },
+                { label: 'Claims Frequency',         value: `${unitEcon.claimsFrequency}%`,                                color: 'text-ink-800' },
+                { label: 'Avg Claim Size',           value: `₹${unitEcon.avgClaimSize.toFixed(0)}`,                        color: 'text-ink-800' },
+                { label: 'Avg Policy Weeks / Rider', value: unitEcon.avgPolicyWeeks,                                       color: 'text-ink-800' },
+              ].map(row => (
+                <div key={row.label} className="flex justify-between items-center py-2.5 border-b border-surface-100 last:border-0">
+                  <span className="text-ink-500 text-xs">{row.label}</span>
+                  <span className={`font-semibold text-sm ${row.color}`}>{row.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>

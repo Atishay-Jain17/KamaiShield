@@ -314,6 +314,133 @@ Explain in 2 sentences what this means for the rider in simple, non-technical la
   }
 });
 
+// ── UNIT ECONOMICS ────────────────────────────────────────────────────────
+router.get('/admin/unit-economics', authMiddleware, adminOnly, (req, res) => {
+  try {
+    // Core premium / payout aggregates
+    const premiumData = db.prepare(`
+      SELECT
+        AVG(premium) as avg_prem,
+        COUNT(*) as total_policies,
+        COUNT(DISTINCT rider_id) as unique_riders,
+        SUM(premium) as total_premiums
+      FROM policies
+    `).get();
+
+    const payoutData = db.prepare(`
+      SELECT COALESCE(SUM(total_amount), 0) as total_payouts
+      FROM payouts WHERE status = 'processed'
+    `).get();
+
+    const activePolicies = db.prepare(`
+      SELECT COUNT(*) as c FROM policies
+      WHERE status = 'active' AND end_date >= date('now')
+    `).get().c;
+
+    const claimData = db.prepare(`
+      SELECT
+        COUNT(*) as total_claims,
+        COALESCE(SUM(payout_amount), 0) as total_claim_payouts
+      FROM claims WHERE status IN ('approved', 'paid')
+    `).get();
+
+    // Retention rate: riders with more than 1 policy / total riders
+    const retentionData = db.prepare(`
+      SELECT
+        COUNT(*) as total_riders,
+        SUM(CASE WHEN policy_count > 1 THEN 1 ELSE 0 END) as returning_riders
+      FROM (
+        SELECT rider_id, COUNT(*) as policy_count FROM policies GROUP BY rider_id
+      )
+    `).get();
+
+    const avgPremium    = parseFloat((premiumData.avg_prem || 52).toFixed(2));
+    const totalPremiums = parseFloat((premiumData.total_premiums || 0).toFixed(2));
+    const totalPayouts  = parseFloat((payoutData.total_payouts || 0).toFixed(2));
+    const totalClaims   = claimData.total_claims || 0;
+    const totalPolicies = premiumData.total_policies || 0;
+    const uniqueRiders  = premiumData.unique_riders || 1;
+
+    // Retention rate
+    const retentionRate = retentionData.total_riders > 0
+      ? parseFloat((retentionData.returning_riders / retentionData.total_riders).toFixed(3))
+      : 0.68;
+
+    // Average policy weeks (assume each policy = 1 week; count policies per rider)
+    const avgPolicyWeeks = uniqueRiders > 0
+      ? parseFloat((totalPolicies / uniqueRiders).toFixed(2))
+      : 4.7;
+
+    // LTV = avg_premium × avg_policy_weeks × retention_rate
+    const ltv = parseFloat((avgPremium * avgPolicyWeeks * retentionRate).toFixed(2));
+
+    // Loss ratio
+    const lossRatio = totalPremiums > 0
+      ? parseFloat(((totalPayouts / totalPremiums) * 100).toFixed(1))
+      : 0;
+
+    const expenseRatio   = 15; // assumed 15%
+    const combinedRatio  = parseFloat((lossRatio + expenseRatio).toFixed(1));
+    const breakEvenLossRatio = 85;
+
+    // MRR = active_policies × avg_premium × 4.33 (weeks/month)
+    const mrr = parseFloat((activePolicies * avgPremium * 4.33).toFixed(2));
+    const arr = parseFloat((mrr * 12).toFixed(2));
+
+    // Reserve adequacy: current reserve / estimated next week payout
+    // Estimate next week payout from predictive engine (simplified: avg weekly payout)
+    const weeklyPayoutData = db.prepare(`
+      SELECT COALESCE(AVG(weekly_total), 0) as avg_weekly
+      FROM (
+        SELECT strftime('%W-%Y', created_at) as wk, SUM(payout_amount) as weekly_total
+        FROM claims WHERE status IN ('approved','paid')
+        GROUP BY wk
+      )
+    `).get();
+    const estimatedNextWeekPayout = parseFloat((weeklyPayoutData.avg_weekly || 1).toFixed(2));
+    const currentReserve = parseFloat((totalPremiums - totalPayouts).toFixed(2));
+    const reserveAdequacy = estimatedNextWeekPayout > 0
+      ? parseFloat((currentReserve / estimatedNextWeekPayout).toFixed(2))
+      : 0;
+
+    // Claims frequency
+    const claimsFrequency = totalPolicies > 0
+      ? parseFloat(((totalClaims / totalPolicies) * 100).toFixed(1))
+      : 0;
+
+    // Average claim size
+    const avgClaimSize = totalClaims > 0
+      ? parseFloat((claimData.total_claim_payouts / totalClaims).toFixed(2))
+      : 0;
+
+    // Solvency margin
+    const solvencyMargin = parseFloat((totalPremiums - totalPayouts).toFixed(2));
+
+    res.json({
+      ltv,
+      avgPremium,
+      avgPolicyWeeks,
+      retentionRate,
+      lossRatio,
+      combinedRatio,
+      breakEvenLossRatio,
+      mrr,
+      arr,
+      reserveAdequacy,
+      claimsFrequency,
+      avgClaimSize,
+      solvencyMargin,
+      totalPremiumsCollected: totalPremiums,
+      totalPayoutsMade: totalPayouts,
+      activePolicies,
+      expenseRatio,
+    });
+  } catch (err) {
+    console.error('[unit-economics]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
 
 // ── PREDICTIVE ANALYTICS ──────────────────────────────────────────────────

@@ -246,11 +246,50 @@ GEMINI_API_KEY=your_gemini_key
 | Weather data (rain, temp) | ✅ Real — WeatherAPI.com |
 | AQI data | ✅ Real — OpenAQ (CPCB stations) |
 | AI explanations | ✅ Real — Gemini 2.0 Flash |
+| ML Risk Model | ✅ Real — Weighted regression with sigmoid normalisation (7 features) |
 | BTS fraud algorithm | ✅ Real algorithm, simulated device signals |
 | Ring detection | ✅ Real — SQL-based pattern detection |
 | UPI payouts | ⚙️ Simulated — real Razorpay integration ready |
 | Platform heartbeat | ⚙️ Simulated — requires delivery platform API access |
 | Cell tower data | ⚙️ Simulated — requires telecom API |
+
+---
+
+## ML Model Architecture
+
+KamaiShield uses a **Weighted Multi-Feature Risk Regression** model for dynamic premium calculation. This replaces static zone multipliers with a data-driven score computed from 7 risk features.
+
+### Model Formula
+
+```
+riskScore = sigmoid( Σ(wᵢ × featureᵢ) + bias )
+multiplier = 0.80 + sigmoidScore × (1.30 − 0.80)
+```
+
+The sigmoid function maps any real number to (0, 1), preventing extreme outliers from distorting premiums.
+
+### Feature Weights
+
+| Feature | Weight | Rationale |
+|---|---|---|
+| Historical disruption frequency (90 days) | 0.28 | Most predictive — past disruptions predict future |
+| Historical claim rate (claims / policies) | 0.22 | High claim rate = genuinely risky zone |
+| Zone flood risk index | 0.15 | Structural geography-based risk |
+| Zone rain risk index | 0.14 | Historical rainfall intensity |
+| Zone AQI risk index | 0.10 | Air quality risk |
+| Zone heat risk index | 0.07 | Heat stress risk |
+| Seasonal factor (month-based) | 0.04 | Current season amplifier |
+
+### Output Range
+
+The model outputs a **risk multiplier in [0.80, 1.30]**:
+- `≥ 1.15` → High Risk Zone (+15–30% premium)
+- `0.91–1.14` → Medium Risk Zone (base premium)
+- `≤ 0.90` → Low Risk Zone (−10–20% discount)
+
+### Transparency
+
+All ML feature values, linear scores, sigmoid outputs, and confidence percentages are visible in the Admin Analytics → Zone Forecast tab via the "Show ML details" toggle on each zone card.
 
 ---
 
@@ -270,7 +309,8 @@ KamaiShield/
 │   └── services/
 │       ├── disruptionMonitor.js  # Real-time weather/AQI + cron
 │       ├── fraudEngine.js        # BTS scoring + ring detection
-│       ├── riskEngine.js         # Premium calculation
+│       ├── riskEngine.js         # Premium calculation + ML integration
+│       ├── mlRiskModel.js        # Weighted regression + sigmoid normalisation
 │       └── analyticsEngine.js   # Predictive risk + trends
 └── frontend/
     ├── src/
@@ -288,7 +328,8 @@ KamaiShield/
     │       ├── Profile.jsx
     │       ├── AdminDashboard.jsx
     │       ├── AdminAnalytics.jsx
-    │       └── AdminPages.jsx
+    │       ├── AdminPages.jsx
+    │       └── Compliance.jsx
     └── public/
         ├── logo.svg
         └── manifest.json

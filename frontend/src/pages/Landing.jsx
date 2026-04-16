@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { ShieldCheck, Zap, CheckCircle2, ArrowRight, Star, CloudRain, Wind, Flame, Waves, Ban } from 'lucide-react';
+import { ShieldCheck, Zap, CheckCircle2, ArrowRight, Star, CloudRain, Wind, Flame, Waves, Ban, MapPin, RefreshCw, Activity, Scale } from 'lucide-react';
 import Logo from '../components/Logo';
 
 export default function Landing() {
@@ -156,6 +156,63 @@ export default function Landing() {
         <p className="text-center text-[#aeaeb2] text-xs mt-4">Premiums adjusted by zone risk score and seasonal factors</p>
       </section>
 
+      {/* Competitive Moat */}
+      <section className="border-y border-[#e5e5ea] py-16" style={{ background: 'rgba(255,255,255,0.6)' }}>
+        <div className="max-w-4xl mx-auto px-4">
+          <div className="text-center mb-10">
+            <p className="text-[11px] font-semibold text-[#8e8e93] uppercase tracking-wider mb-2">Competitive advantage</p>
+            <h2 className="text-[26px] font-bold text-[#1c1c1e] tracking-tight">Why KamaiShield wins</h2>
+            <p className="text-[#8e8e93] text-sm mt-2">The moat that incumbents can't replicate</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {[
+              {
+                Icon: MapPin,
+                color: '#0284c7',
+                bg: '#e0f2fe',
+                title: 'Pincode-level precision',
+                desc: 'Bajaj Allianz covers "Mumbai". We cover Kurla (400070) specifically. A flood in Andheri doesn\'t pay Kurla riders.',
+              },
+              {
+                Icon: Zap,
+                color: '#d97706',
+                bg: '#fef3c7',
+                title: 'Zero-claim friction',
+                desc: 'Traditional insurers require 7–14 day claim processing. We pay in 7 days with zero rider action.',
+              },
+              {
+                Icon: RefreshCw,
+                color: '#059669',
+                bg: '#d1fae5',
+                title: 'Gig-native pricing',
+                desc: 'Weekly premiums match weekly income cycles. No annual commitment. Cancel anytime.',
+              },
+              {
+                Icon: Activity,
+                color: '#7c3aed',
+                bg: '#ede9fe',
+                title: 'Real-time parametric triggers',
+                desc: 'We use live WeatherAPI + OpenAQ data. No adjuster. No dispute. Threshold crossed = payout triggered.',
+              },
+            ].map((item, i) => (
+              <div
+                key={item.title}
+                className="card-glass hover:shadow-card-md transition-all duration-200 animate-fade-up flex gap-4"
+                style={{ animationDelay: `${i * 80}ms` }}
+              >
+                <div className="icon-wrap w-11 h-11 shrink-0" style={{ background: item.bg }}>
+                  <item.Icon size={20} color={item.color} strokeWidth={1.8} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-[#1c1c1e] text-sm mb-1">{item.title}</h3>
+                  <p className="text-[#636366] text-xs leading-relaxed">{item.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* CTA */}
       <section className="max-w-2xl mx-auto px-4 py-20 text-center">
         <div className="inline-flex items-center gap-1 mb-4">
@@ -171,6 +228,25 @@ export default function Landing() {
           </Link>
         )}
       </section>
+
+      {/* Footer */}
+      <footer className="border-t border-[#e5e5ea] py-8" style={{ background: 'rgba(255,255,255,0.7)' }}>
+        <div className="max-w-4xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <Logo height={24} />
+            <span className="text-[#8e8e93] text-xs">© 2026 KamaiShield. All rights reserved.</span>
+          </div>
+          <div className="flex items-center gap-5">
+            <Link to="/compliance" className="flex items-center gap-1.5 text-[#636366] text-xs hover:text-[#4f46e5] transition-colors font-medium">
+              <Scale size={12} strokeWidth={2} />
+              Compliance &amp; IRDAI
+            </Link>
+            <a href="mailto:legal@kamaishield.in" className="text-[#636366] text-xs hover:text-[#4f46e5] transition-colors">
+              legal@kamaishield.in
+            </a>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

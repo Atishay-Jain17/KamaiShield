@@ -262,6 +262,107 @@ export default function AdminDashboard() {
         }
       </div>
 
+      {/* Actuarial Summary */}
+      {(() => {
+        const totalPremiums = overview.totalPremiums || 0;
+        const totalPayouts  = overview.totalPayouts  || 0;
+        const totalClaims   = overview.totalClaims   || 0;
+        const totalPolicies = overview.activePolicies || 1;
+        const lr            = parseFloat(lossRatio) || 0;
+
+        // Estimated next week payout (rough: avg weekly from total)
+        const estNextWeekPayout = totalPayouts > 0 ? totalPayouts / 8 : 0; // assume 8 weeks of data
+        const reserveReq95      = estNextWeekPayout * 1.5;
+        const solvencyMargin    = totalPremiums - totalPayouts;
+        const claimsFreq        = totalPolicies > 0 ? ((totalClaims / totalPolicies) * 100).toFixed(1) : 0;
+        const avgClaimSize      = totalClaims > 0 ? (totalPayouts / totalClaims).toFixed(0) : 0;
+
+        const rows = [
+          {
+            label: 'Expected Loss Ratio Target',
+            value: '70%',
+            note: 'Industry benchmark for micro-insurance',
+            status: 'info',
+          },
+          {
+            label: 'Current Loss Ratio',
+            value: `${lr}%`,
+            note: lr < 70 ? 'Healthy — below target' : lr < 85 ? 'Acceptable — monitor closely' : 'High — review reserve',
+            status: lr < 70 ? 'green' : lr < 85 ? 'yellow' : 'red',
+          },
+          {
+            label: 'Reserve Requirement (95% confidence)',
+            value: `₹${Math.round(reserveReq95).toLocaleString('en-IN')}`,
+            note: 'Est. next week payout × 1.5',
+            status: solvencyMargin >= reserveReq95 ? 'green' : 'red',
+          },
+          {
+            label: 'Solvency Margin',
+            value: `₹${Math.round(solvencyMargin).toLocaleString('en-IN')}`,
+            note: solvencyMargin >= 0 ? 'Positive — solvent' : 'Negative — reserve deficit',
+            status: solvencyMargin >= 0 ? 'green' : 'red',
+          },
+          {
+            label: 'Claims Frequency',
+            value: `${claimsFreq}%`,
+            note: 'Total claims / total policies',
+            status: parseFloat(claimsFreq) < 50 ? 'green' : parseFloat(claimsFreq) < 80 ? 'yellow' : 'red',
+          },
+          {
+            label: 'Average Claim Size',
+            value: `₹${avgClaimSize}`,
+            note: 'Total payouts / total claims',
+            status: 'info',
+          },
+        ];
+
+        const statusColor = {
+          green:  { row: 'hover:bg-success-50/30', dot: 'bg-success-500', text: 'text-success-700' },
+          yellow: { row: 'hover:bg-warning-50/30', dot: 'bg-warning-500', text: 'text-warning-700' },
+          red:    { row: 'hover:bg-danger-50/30',  dot: 'bg-danger-500',  text: 'text-danger-700'  },
+          info:   { row: 'hover:bg-surface-50',    dot: 'bg-primary-400', text: 'text-primary-700' },
+        };
+
+        return (
+          <div className="card mb-6">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-7 h-7 bg-primary-100 rounded-lg flex items-center justify-center">
+                <BarChart3 size={14} className="text-primary-600"/>
+              </div>
+              <h3 className="text-sm font-semibold text-ink-800">Actuarial Summary</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-ink-400 border-b border-surface-100">
+                    <th className="text-left py-2 pr-4 font-medium">Metric</th>
+                    <th className="text-left py-2 pr-4 font-medium">Value</th>
+                    <th className="text-left py-2 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map(row => {
+                    const s = statusColor[row.status];
+                    return (
+                      <tr key={row.label} className={`border-b border-surface-50 last:border-0 transition-colors ${s.row}`}>
+                        <td className="py-2.5 pr-4 text-ink-700 font-medium">{row.label}</td>
+                        <td className="py-2.5 pr-4 font-bold text-ink-900">{row.value}</td>
+                        <td className="py-2.5">
+                          <div className="flex items-center gap-1.5">
+                            <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.dot}`}/>
+                            <span className={`text-[10px] font-medium ${s.text}`}>{row.note}</span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Ring Detection Alerts */}
       <div className="card mb-6">
         <div className="flex items-center justify-between mb-4">
