@@ -31,7 +31,7 @@ try {
 // ── CORS ──────────────────────────────────────────────────────────────────
 const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:5173').split(',').map(o => o.trim());
 app.use(cors({
-  origin: (origin, cb) => (!origin || isDev || allowedOrigins.includes(origin)) ? cb(null, true) : cb(new Error('CORS blocked')),
+  origin: (origin, cb) => (!origin || isDev || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) ? cb(null, true) : cb(new Error('CORS blocked')),
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
